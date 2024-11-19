@@ -2,6 +2,7 @@
 import copy
 import json
 import time
+import shlex
 from typing import Any, Callable, Dict, List, Optional, Union
 import uuid
 
@@ -490,16 +491,31 @@ def pre_init(namespace: str, context: Optional[str], new_nodes: List) -> None:
                     set_k8s_env_var_cmd + check_apt_update_complete_cmd +
                     install_ssh_k8s_cmd)
 
+    logger.info("initted")
+
     def _pre_init_thread(new_node):
         pod_name = new_node.metadata.name
         logger.info(f'{"-"*20}Start: Pre-init in pod {pod_name!r} {"-"*20}')
         runner = command_runner.KubernetesCommandRunner(
             ((namespace, context), pod_name))
 
-        # Run the combined pre-init command
-        rc, stdout, _ = runner.run(pre_init_cmd,
-                                   require_outputs=True,
-                                   stream_logs=False)
+        # XXX rename
+        # $0 should be the tmpdir
+        write_rc_command = ('set -uo pipefail;'
+                            f'bash -c {shlex.quote(pre_init_cmd)};'
+                            'echo $? > "$0/status_code";')
+        background_command = (
+            'set -euxo pipefail;'
+            'tmpdir=$(mktemp -d);'
+            f'bash -c {shlex.quote(write_rc_command)} "$tmpdir" '
+            '>"$tmpdir/stdout" 2>"$tmpdir/stderr" & '
+            'echo $! >"$tmpdir/pid";'
+            'echo "$tmpdir";')
+        logger.info(background_command)
+        rc, stdout, stderr = runner.run(background_command,
+                                        require_outputs=True,
+                                        stream_logs=False,
+                                        separate_stderr=True)
         if rc == exceptions.INSUFFICIENT_PRIVILEGES_CODE:
             raise config_lib.KubernetesError(
                 'Insufficient system privileges detected. '
@@ -508,13 +524,61 @@ def pre_init(namespace: str, context: Optional[str], new_nodes: List) -> None:
                 'from the image.')
 
         op_name = 'pre-init'
+        #XXX
         _raise_command_running_error(op_name, pre_init_cmd, pod_name, rc,
-                                     stdout)
+                                     stdout + stderr)
 
         logger.info(f'{"-"*20}End: Pre-init in pod {pod_name!r} {"-"*20}')
 
+        return stdout.strip()
+
     # Run pre_init in parallel across all new_nodes
-    subprocess_utils.run_in_parallel(_pre_init_thread, new_nodes, NUM_THREADS)
+    tmpdirs = subprocess_utils.run_in_parallel(_pre_init_thread, new_nodes,
+                                               NUM_THREADS)
+
+    # XXX rename
+    def _pre_init_await(args):
+        (new_node, tmpdir) = args
+        pod_name = new_node.metadata.name
+        logger.info(
+            f'{"-"*20}Start: Pre-init wait in pod {pod_name!r} {"-"*20}')
+        runner = command_runner.KubernetesCommandRunner(
+            ((namespace, context), pod_name))
+
+        command = (
+            'set -euo pipefail;'
+            f'tmpdir="{tmpdir}";'
+            # If the status code file doesn't exist, use kill -0 to check that
+            # the process still exists. kill -0 will not actually send a signal.
+            'while [ ! -f "$tmpdir/status_code" ] && '
+            '      kill -0 "$(cat "$tmpdir/pid")"; do '
+            '  sleep 1;'
+            'done;'
+            'cat "$tmpdir/stdout";'
+            'cat "$tmpdir/stderr" >&2; '
+            'if [ -f "$tmpdir/status_code" ]; then '
+            '  exit "$(cat "$tmpdir/status_code")";'
+            'fi;'
+            'echo error: missing status_code;'
+            'exit 1;')
+        rc, stdout, _ = runner.run(command,
+                                   require_outputs=True,
+                                   stream_logs=False,
+                                   separate_stderr=False)
+        if rc == exceptions.INSUFFICIENT_PRIVILEGES_CODE:
+            raise config_lib.KubernetesError(
+                'XXX Insufficient system privileges detected. '
+                'Ensure the default user has root access or '
+                '"sudo" is installed and the user is added to the sudoers '
+                'from the image.')
+
+        op_name = 'pre-init wait'
+        _raise_command_running_error(op_name, command, pod_name, rc, stdout)
+
+        logger.info(f'{"-"*20}End: Pre-init wait in pod {pod_name!r} {"-"*20}')
+
+    subprocess_utils.run_in_parallel(_pre_init_await, zip(new_nodes, tmpdirs),
+                                     NUM_THREADS)
 
 
 def _label_pod(namespace: str, context: Optional[str], pod_name: str,
