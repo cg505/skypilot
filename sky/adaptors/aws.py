@@ -32,13 +32,17 @@ import functools
 import logging
 import threading
 import time
-from typing import Any, Callable
+import typing
 
 from sky.adaptors import common
 from sky.utils import common_utils
 
+if typing.TYPE_CHECKING:
+    import boto3 as boto3_lib
+
 _IMPORT_ERROR_MESSAGE = ('Failed to import dependencies for AWS. '
                          'Try pip install "skypilot[aws]"')
+
 boto3 = common.LazyImport('boto3', import_error_message=_IMPORT_ERROR_MESSAGE)
 botocore = common.LazyImport('botocore',
                              import_error_message=_IMPORT_ERROR_MESSAGE)
@@ -67,12 +71,15 @@ def _thread_local_lru_cache(maxsize=32):
     local_cache = _ThreadLocalLRUCache(maxsize)
 
     def decorator(func):
+        cached_func = local_cache.cache(func)
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             # Use the thread-local LRU cache
-            return local_cache.cache(func)(*args, **kwargs)
+            return cached_func(*args, **kwargs)
 
+        # Expose cache_clear() method
+        wrapper.cache_clear = cached_func.cache_clear
         return wrapper
 
     return decorator
@@ -83,18 +90,17 @@ def _assert_kwargs_builtin_type(kwargs):
         f'kwargs should not contain none built-in types: {kwargs}')
 
 
-def _create_aws_object(creation_fn_or_cls: Callable[[], Any],
-                       object_name: str) -> Any:
-    """Create an AWS object.
+# The LRU cache needs to be thread-local to avoid multiple threads sharing the
+# same session object, which is not guaranteed to be thread-safe.
+@_thread_local_lru_cache()
+def session() -> 'boto3_lib.session.Session':
+    """Create an AWS session."""
+    return boto3.session.Session()
 
-    Args:
-        creation_fn: The function to create the AWS object.
 
-    Returns:
-        The created AWS object.
-    """
+def get_session() -> 'boto3_lib.session.Session':
     attempt = 0
-    backoff = common_utils.Backoff()
+    backoff = common_utils.Backoff(initial_backoff=0.5, max_backoff_factor=4)
     while True:
         try:
             # Creating the boto3 objects are not thread-safe,
@@ -106,23 +112,21 @@ def _create_aws_object(creation_fn_or_cls: Callable[[], Any],
             # and we are not sure if the code inside 'session()' or
             # 'session().xx()' is thread-safe.
             with _session_creation_lock:
-                return creation_fn_or_cls()
+                # Check if the credentials are valid, and we should retry
+                # if the credentials are not valid. The retry is needed because
+                # the credentials may be rotated for assumed roles.
+                s = session()
+                s.get_credentials()
+                return s
         except (botocore_exceptions().CredentialRetrievalError,
                 botocore_exceptions().NoCredentialsError) as e:
             attempt += 1
             if attempt >= _MAX_ATTEMPT_FOR_CREATION:
                 raise
             time.sleep(backoff.current_backoff())
-            logger.info(f'Retry creating AWS {object_name} due to '
+            logger.info(f'Retry creating AWS session due to '
                         f'{common_utils.format_exception(e)}.')
-
-
-# The LRU cache needs to be thread-local to avoid multiple threads sharing the
-# same session object, which is not guaranteed to be thread-safe.
-@_thread_local_lru_cache()
-def session():
-    """Create an AWS session."""
-    return _create_aws_object(boto3.session.Session, 'session')
+            session.cache_clear()
 
 
 # Avoid caching the resource/client objects. If we are using the assumed role,
@@ -133,7 +137,8 @@ def session():
 # The creation of the resource/client is relatively fast (around 0.3s), so the
 # performance impact is negligible.
 # Reference: https://github.com/skypilot-org/skypilot/issues/2697
-def resource(service_name: str, **kwargs):
+def resource(service_name: str,
+             **kwargs) -> 'boto3_lib.resource.base.ServiceResource':
     """Create an AWS resource of a certain service.
 
     Args:
@@ -152,11 +157,10 @@ def resource(service_name: str, **kwargs):
     # Need to use the client retrieved from the per-thread session to avoid
     # thread-safety issues (Directly creating the client with boto3.resource()
     # is not thread-safe). Reference: https://stackoverflow.com/a/59635814
-    return _create_aws_object(
-        lambda: session().resource(service_name, **kwargs), 'resource')
+    return get_session().resource(service_name, **kwargs)
 
 
-def client(service_name: str, **kwargs):
+def client(service_name: str, **kwargs) -> 'boto3_lib.client.Client':
     """Create an AWS client of a certain service.
 
     Args:
@@ -167,9 +171,7 @@ def client(service_name: str, **kwargs):
     # Need to use the client retrieved from the per-thread session to avoid
     # thread-safety issues (Directly creating the client with boto3.client() is
     # not thread-safe). Reference: https://stackoverflow.com/a/59635814
-
-    return _create_aws_object(lambda: session().client(service_name, **kwargs),
-                              'client')
+    return get_session().client(service_name, **kwargs)
 
 
 @common.load_lazy_modules(modules=_LAZY_MODULES)
