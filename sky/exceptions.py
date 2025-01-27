@@ -289,6 +289,13 @@ class AWSAzFetchingError(Exception):
         super().__init__(reason.message)
 
 
+class AWSCredentialsNoneError(Exception):
+    """This is thrown if AWS get_credentials returns None.
+    
+    This is needed because botocore does not always throw NoCredentialsError."""
+    pass
+
+
 class ServeUserTerminatedError(Exception):
     """Raised by serve controller when a user tear down the service."""
     pass

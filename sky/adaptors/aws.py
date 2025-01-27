@@ -36,6 +36,7 @@ import typing
 
 from sky.adaptors import common
 from sky.utils import common_utils
+from sky import exceptions
 
 if typing.TYPE_CHECKING:
     import boto3 as boto3_lib
@@ -69,20 +70,10 @@ class _ThreadLocalLRUCache(threading.local):
 def _thread_local_lru_cache(maxsize=32):
     # Create thread-local storage for the LRU cache
     local_cache = _ThreadLocalLRUCache(maxsize)
-
-    def decorator(func):
-        cached_func = local_cache.cache(func)
-
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            # Use the thread-local LRU cache
-            return cached_func(*args, **kwargs)
-
-        # Expose cache_clear() method
-        wrapper.cache_clear = cached_func.cache_clear
-        return wrapper
-
-    return decorator
+    
+    # local_cache.cache gives the decorator function (equivalent to 
+    # functools.lru_cache) corresponding to this local cache.
+    return local_cache.cache
 
 
 def _assert_kwargs_builtin_type(kwargs):
@@ -116,10 +107,13 @@ def get_session() -> 'boto3_lib.session.Session':
                 # if the credentials are not valid. The retry is needed because
                 # the credentials may be rotated for assumed roles.
                 s = session()
-                s.get_credentials()
+                if s.get_credentials() is None:
+                    raise exceptions.AWSCredentialsNoneError(
+                        'get_credentials returned None')
                 return s
         except (botocore_exceptions().CredentialRetrievalError,
-                botocore_exceptions().NoCredentialsError) as e:
+                botocore_exceptions().NoCredentialsError,
+                exceptions.AWSCredentialsNoneError) as e:
             attempt += 1
             if attempt >= _MAX_ATTEMPT_FOR_CREATION:
                 raise
