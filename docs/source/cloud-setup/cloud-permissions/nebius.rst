@@ -30,7 +30,7 @@ Then, run the following command to generate the service account credentials:
   --service-account-id $SA_ID \
   --output ~/.nebius/credentials.json
 
-The following script saves the service account credentials to `~/.nebius/credentials.json`:
+The following script saves the service account credentials to ``~/.nebius/credentials.json``:
 
 See `Nebius documentation on creating authorized keys <https://docs.nebius.com/iam/service-accounts/authorized-keys#create>`_ for more details.
 
@@ -54,7 +54,7 @@ To verify that the service account credentials are working with SkyPilot, run th
 
 **Important Notes:**
 
-* The `NEBIUS_IAM_TOKEN` file, if present, will take priority for authentication.
+* The ``NEBIUS_IAM_TOKEN`` file, if present, will take priority for authentication.
 
 Using internal IPs
 -----------------------
