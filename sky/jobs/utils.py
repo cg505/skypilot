@@ -931,9 +931,10 @@ def dump_managed_job_queue() -> str:
     jobs = managed_job_state.get_managed_jobs()
 
     # Figure out what the highest priority blocking job is. We need to know in
-    # order to determine if other jobs are blocked by a higher priority job, or
-    # just by the limited controller resources.
-    lowest_blocking_priority_value = 1000
+    # order to determine if other jobs are blocked by a job with higher
+    # priority, or just by the limited controller resources.
+    # With the new priority system, a higher numerical value means higher priority.
+    highest_blocking_priority_value = 0  # Initialize to the lowest possible priority
     for job in jobs:
         if job['schedule_state'] not in (
                 # LAUNCHING and ALIVE_BACKOFF jobs will block other jobs with
@@ -949,8 +950,9 @@ def dump_managed_job_queue() -> str:
             continue
 
         priority = job.get('priority')
-        if priority is not None and priority < lowest_blocking_priority_value:
-            lowest_blocking_priority_value = priority
+        # Find the maximum priority among potentially blocking jobs.
+        if priority is not None and priority > highest_blocking_priority_value:
+            highest_blocking_priority_value = priority
 
     for job in jobs:
         end_at = job['end_at']
@@ -998,11 +1000,13 @@ def dump_managed_job_queue() -> str:
             state_details = 'In backoff, waiting for resources'
         elif job['schedule_state'] in ('WAITING', 'ALIVE_WAITING'):
             priority = job.get('priority')
+            # If the current job's priority is less than the highest priority of any
+            # blocking job, it means it's waiting for a higher priority job.
             if (priority is not None and
-                    priority > lowest_blocking_priority_value):
-                # Job is lower priority than some other blocking job.
+                    priority < highest_blocking_priority_value):
                 state_details = 'Waiting for higher priority jobs to launch'
             else:
+                # Otherwise, it's waiting for resources or its turn based on general scheduling.
                 state_details = 'Waiting for other jobs to launch'
 
         if state_details and job['failure_reason']:

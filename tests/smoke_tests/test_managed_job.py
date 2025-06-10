@@ -800,6 +800,172 @@ def test_managed_jobs_retry_logs(generic_cloud: str):
             smoke_tests_utils.run_one_test(test)
 
 
+@pytest.mark.managed_jobs
+def test_managed_jobs_priority_scheduling(generic_cloud: str):
+    """Test managed jobs priority scheduling (higher value = higher priority)."""
+    job_a_name = smoke_tests_utils.get_cluster_name()
+    job_b_name = smoke_tests_utils.get_cluster_name()
+    job_c_name = smoke_tests_utils.get_cluster_name()
+
+    cloud_arg = f'--infra {generic_cloud}'
+    # For some clouds, the default instance might be too large for
+    # LOW_RESOURCE_ARG, causing test flakiness.
+    # We use a known small instance type for testing priority.
+    # On GCP, f1-micro is too small for our image's default disk size.
+    # n1-standard-1 has 1 vCPU, 3.75 GB RAM.
+    # On AWS, t2.micro has 1 vCPU, 1 GB RAM.
+    # On Azure, Standard_B1s has 1 vCPU, 1 GB RAM.
+    # LOW_RESOURCE_ARG is currently '--cpus 2+ --memory 4+'.
+    # The managed job itself does not require many resources.
+    # The specific instance type for the job cluster does not matter as much as
+    # the controller's own resource constraints for this test.
+    # We will rely on LOW_CONTROLLER_RESOURCE_ENV to constrain the controller.
+
+    job_echo_prefix = "SKYPILOT_PRIORITY_TEST"
+
+    # Durations need to be long enough to observe order, but not too long for test speed.
+    # If Job A (lowest priority) is very long, it might block scheduler slots for B and C.
+    # If all are short, and controller parallelism is high, they might all appear to run/finish concurrently.
+    # Let's make them distinct to help differentiate.
+    job_a_duration = 15  # Low priority
+    job_b_duration = 10  # High priority
+    job_c_duration = 12  # Medium priority
+
+    # Ensure jobs are launched with -d to not block subsequent launches.
+    job_a_cmd = (
+        f'sky jobs launch -n {job_a_name} --priority 100 {cloud_arg} '
+        f'{smoke_tests_utils.LOW_RESOURCE_ARG} '
+        f'"echo \'{job_echo_prefix} Job A priority 100 running\'; sleep {job_a_duration}" -y -d'
+    )
+    job_b_cmd = (
+        f'sky jobs launch -n {job_b_name} --priority 900 {cloud_arg} '
+        f'{smoke_tests_utils.LOW_RESOURCE_ARG} '
+        f'"echo \'{job_echo_prefix} Job B priority 900 running\'; sleep {job_b_duration}" -y -d'
+    )
+    job_c_cmd = (
+        f'sky jobs launch -n {job_c_name} --priority 500 {cloud_arg} '
+        f'{smoke_tests_utils.LOW_RESOURCE_ARG} '
+        f'"echo \'{job_echo_prefix} Job C priority 500 running\'; sleep {job_c_duration}" -y -d'
+    )
+
+    # Command to get start times of successfully completed jobs, looking for our specific echo.
+    # This assumes logs are available and jobs have completed.
+    # Output format: <timestamp_seconds> <job_name>
+    # We use `sky jobs logs --no-follow` which should print all logs for a completed job.
+    # Grep for the specific echo, then for the timestamp from the log prefix.
+    # Example log line: 2023-10-26 12:34:56 | SKYPILOT_PRIORITY_TEST Job B ...
+    # We need to be careful with the log format. `sky jobs logs` prepends its own timestamp.
+    # Let's use a unique marker in the job's echo and grep for that line to get an idea of start.
+    # A more robust way is to check SUCCEEDED transition times.
+
+    # We will poll `sky jobs queue` and record the first time a job is seen as SUCCEEDED.
+    # This is a proxy for completion order.
+    # Timeout for each job status check.
+    # Needs to be long enough for jobs to provision and run.
+    # For some clouds (Azure), provisioning can take several minutes.
+    # If LOW_RESOURCE_ARG makes jobs use very slow instances, this needs to be generous.
+    # Total time: A (15s) + B (10s) + C (12s) + provisioning for 3 clusters.
+    # Let's estimate provisioning per cluster: 3-5 mins. Total ~10-15 mins for provisioning.
+    # Max job duration is 15s.
+    # Overall timeout for each check should be generous.
+    status_check_timeout = 15 * 60  # 15 minutes, should be ample for one job.
+
+    # We use a list of commands to record timestamps using shell commands.
+    # This is a bit indirect but avoids needing direct Python SDK access to job details here.
+    # Timestamps are written to temporary files.
+    tmpdir = tempfile.mkdtemp()
+    job_a_finish_time_file = pathlib.Path(tmpdir) / f'{job_a_name}.time'
+    job_b_finish_time_file = pathlib.Path(tmpdir) / f'{job_b_name}.time'
+    job_c_finish_time_file = pathlib.Path(tmpdir) / f'{job_c_name}.time'
+
+    def _get_wait_cmd(job_name, status, time_file):
+        # Wait for status, then record current unix timestamp to time_file.
+        # Allow PENDING as an initial state before STARTING for robustness.
+        initial_statuses = [
+            sky.ManagedJobStatus.PENDING,
+            sky.ManagedJobStatus.DEPRECATED_SUBMITTED,
+            sky.ManagedJobStatus.STARTING,
+        ]
+        if status == sky.ManagedJobStatus.RUNNING:
+            initial_statuses.append(sky.ManagedJobStatus.RUNNING)
+        elif status == sky.ManagedJobStatus.SUCCEEDED:
+            initial_statuses.extend([
+                sky.ManagedJobStatus.RUNNING, sky.ManagedJobStatus.SUCCEEDED
+            ])
+
+        return (
+            smoke_tests_utils.
+            get_cmd_wait_until_managed_job_status_contains_matching_job_name(
+                job_name=job_name,
+                job_status=[status], # Check for the final target status
+                timeout=status_check_timeout) + f' && date +%s > {time_file}')
+
+    test_cmds = [
+        # Launch all jobs in quick succession.
+        # The order of launching low->high->medium is intentional to see if scheduler picks high over medium.
+        job_a_cmd,
+        job_b_cmd,
+        job_c_cmd,
+        # Wait for B (high prio) to succeed and record time.
+        _get_wait_cmd(job_b_name, sky.ManagedJobStatus.SUCCEEDED,
+                        job_b_finish_time_file),
+        # Wait for C (medium prio) to succeed and record time.
+        _get_wait_cmd(job_c_name, sky.ManagedJobStatus.SUCCEEDED,
+                        job_c_finish_time_file),
+        # Wait for A (low prio) to succeed and record time.
+        _get_wait_cmd(job_a_name, sky.ManagedJobStatus.SUCCEEDED,
+                        job_a_finish_time_file),
+    ]
+
+    teardown_cmd = (
+        f'sky jobs cancel -y -n {job_a_name}; '
+        f'sky jobs cancel -y -n {job_b_name}; '
+        f'sky jobs cancel -y -n {job_c_name}; '
+        f'rm -rf {tmpdir}')
+
+    test = smoke_tests_utils.Test(
+        'managed_jobs_priority_scheduling',
+        test_cmds,
+        teardown_cmd,
+        env=smoke_tests_utils.LOW_CONTROLLER_RESOURCE_ENV,
+        # Timeout for the entire sequence of commands.
+        # Sum of job durations + provisioning time for 3 clusters + buffer.
+        # (10+12+15)s for sleep, + 3 * (let's say 5 mins for worst-case provisioning) = ~16 mins.
+        # Add buffer for queue checks.
+        timeout=30 * 60, # 30 minutes
+    )
+
+    # Store results outside the test object as it's not picklable for remote.
+    test.custom_cleanup_data = { # Store file paths for cleanup
+        'tmpdir': tmpdir,
+        'job_a_finish_time_file': job_a_finish_time_file,
+        'job_b_finish_time_file': job_b_finish_time_file,
+        'job_c_finish_time_file': job_c_finish_time_file,
+    }
+
+    try:
+        smoke_tests_utils.run_one_test(test)
+
+        # After commands run, check timestamps from files
+        time_b = int(job_b_finish_time_file.read_text().strip())
+        time_c = int(job_c_finish_time_file.read_text().strip())
+        time_a = int(job_a_finish_time_file.read_text().strip())
+
+        print(f"Finish times: A={time_a}, B={time_b}, C={time_c}")
+
+        # Assert B finished before C, and C finished before A.
+        # Add a small epsilon if needed, but ideally direct order holds.
+        assert time_b < time_c, f"Job B (high prio, {time_b}) did not finish before Job C (mid prio, {time_c})"
+        assert time_c < time_a, f"Job C (mid prio, {time_c}) did not finish before Job A (low prio, {time_a})"
+
+    finally:
+        # Ensure local temp files are cleaned up even if run_one_test fails before teardown_cmd
+        if pathlib.Path(tmpdir).exists():
+            import shutil
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+
 # ---------- Testing storage for managed job ----------
 @pytest.mark.no_fluidstack  # Fluidstack does not support spot instances
 @pytest.mark.no_lambda_cloud  # Lambda Cloud does not support spot instances
