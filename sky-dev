@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# sky-dev: Multi-instance development wrapper for SkyPilot
+#
+# Usage: sky-dev <instance-id> <command> [args...]
+#
+# Examples:
+#   sky-dev 1 sky status                    # Use instance 1
+#   sky-dev 2 sky launch mycluster.yaml     # Use instance 2
+#   sky-dev 0 python -m sky.client.cli.cli  # Direct Python invocation
+#
+# Each instance gets isolated state in ~/.sky-dev-<id>/ and runs the API
+# server on port 46580+<id>.
+#
+# Environment variables set:
+#   SKYPILOT_INSTANCE_ID - Instance identifier
+#   SKYPILOT_API_SERVER_ENDPOINT - API server URL for this instance
+
+set -e
+
+# Check arguments
+if [ "$#" -lt 2 ]; then
+    echo "Usage: $0 <instance-id> <command> [args...]" >&2
+    echo "" >&2
+    echo "Examples:" >&2
+    echo "  $0 1 sky status" >&2
+    echo "  $0 2 sky launch mycluster.yaml" >&2
+    exit 1
+fi
+
+INSTANCE_ID="$1"
+shift
+
+# Validate instance ID is a number
+if ! [[ "$INSTANCE_ID" =~ ^[0-9]+$ ]]; then
+    echo "Error: instance-id must be a non-negative integer" >&2
+    exit 1
+fi
+
+# Set environment variables
+export SKYPILOT_INSTANCE_ID="$INSTANCE_ID"
+export SKYPILOT_API_SERVER_ENDPOINT="http://127.0.0.1:$((46580 + INSTANCE_ID))"
+
+# Create instance directory if it doesn't exist
+INSTANCE_DIR="$HOME/.sky-dev-$INSTANCE_ID"
+mkdir -p "$INSTANCE_DIR"
+
+# Informational output (to stderr so it doesn't pollute command output)
+echo "[sky-dev] Using instance $INSTANCE_ID" >&2
+echo "[sky-dev] State directory: $INSTANCE_DIR" >&2
+echo "[sky-dev] API server URL: $SKYPILOT_API_SERVER_ENDPOINT" >&2
+echo "" >&2
+
+# Execute the command
+exec "$@"

@@ -39,9 +39,9 @@ class SSHConfigHelper(object):
     """Helper for handling local SSH configuration."""
 
     ssh_conf_path = '~/.ssh/config'
-    ssh_conf_lock_path = os.path.expanduser('~/.sky/locks/.ssh_config.lock')
-    ssh_conf_per_cluster_lock_path = os.path.expanduser(
-        '~/.sky/locks/.ssh_config_{}.lock')
+    ssh_conf_lock_path = common_utils.get_sky_dir('locks/.ssh_config.lock')
+    ssh_conf_per_cluster_lock_path = common_utils.get_sky_dir(
+        'locks/.ssh_config_{}.lock')
     ssh_cluster_path = constants.SKY_USER_FILE_PATH + '/ssh/{}'
     ssh_cluster_key_path = constants.SKY_USER_FILE_PATH + '/ssh-keys/{}.key'
 

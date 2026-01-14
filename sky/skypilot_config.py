@@ -116,7 +116,9 @@ ENV_VAR_GLOBAL_CONFIG = f'{constants.SKYPILOT_ENV_VAR_PREFIX}GLOBAL_CONFIG'
 ENV_VAR_PROJECT_CONFIG = f'{constants.SKYPILOT_ENV_VAR_PREFIX}PROJECT_CONFIG'
 
 # Path to the client config files.
-_GLOBAL_CONFIG_PATH = '~/.sky/config.yaml'
+# Note: These are initialized at module import time. For multi-instance dev,
+# SKYPILOT_INSTANCE_ID must be set before importing sky.
+_GLOBAL_CONFIG_PATH = os.path.join(common_utils.get_sky_dir(), 'config.yaml')
 _PROJECT_CONFIG_PATH = '.sky.yaml'
 
 API_SERVER_CONFIG_KEY = 'api_server_config'
@@ -149,12 +151,13 @@ class ConfigContext:
 _active_workspace_context = threading.local()
 _global_config_context = ConfigContext()
 
-SKYPILOT_CONFIG_LOCK_PATH = '~/.sky/locks/.skypilot_config.lock'
+SKYPILOT_CONFIG_LOCK_PATH = os.path.join(common_utils.get_sky_dir(),
+                                           'locks/.skypilot_config.lock')
 
 
 def get_skypilot_config_lock_path() -> str:
     """Get the path for the SkyPilot config lock file."""
-    lock_path = os.path.expanduser(SKYPILOT_CONFIG_LOCK_PATH)
+    lock_path = SKYPILOT_CONFIG_LOCK_PATH
     os.makedirs(os.path.dirname(lock_path), exist_ok=True)
     return lock_path
 

@@ -21,7 +21,7 @@ from sky.utils import ux_utils
 logger = sky_logging.init_logger(__name__)
 
 # Filelocks for the storage management.
-VOLUME_LOCK_PATH = os.path.expanduser('~/.sky/.{volume_name}.lock')
+VOLUME_LOCK_PATH = common_utils.get_sky_dir('.{volume_name}.lock')
 VOLUME_LOCK_TIMEOUT_SECONDS = 20
 
 

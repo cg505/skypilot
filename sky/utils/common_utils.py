@@ -40,7 +40,7 @@ else:
     jinja2 = adaptors_common.LazyImport('jinja2')
     psutil = adaptors_common.LazyImport('psutil')
 
-USER_HASH_FILE = os.path.expanduser('~/.sky/user_hash')
+USER_HASH_FILE = get_sky_dir('user_hash')
 USER_HASH_LENGTH = 8
 
 # We are using base36 to reduce the length of the hash. 2 chars -> 36^2 = 1296
@@ -53,6 +53,38 @@ _COLOR_PATTERN = re.compile(r'\x1b[^m]*m')
 _VALID_ENV_VAR_REGEX = '[a-zA-Z_][a-zA-Z0-9_]*'
 
 logger = sky_logging.init_logger(__name__)
+
+
+def get_sky_dir(subpath: str = '') -> str:
+    """Get ~/.sky directory path with multi-instance dev support.
+
+    This function checks the SKYPILOT_INSTANCE_ID environment variable
+    to support running multiple isolated SkyPilot instances locally for
+    development purposes. Each instance gets its own state directory.
+
+    Args:
+        subpath: Optional subdirectory or file path within .sky/
+
+    Returns:
+        Absolute path to the .sky directory or subdirectory
+
+    Examples:
+        >>> get_sky_dir()
+        '/home/user/.sky'
+        >>> get_sky_dir('config.yaml')
+        '/home/user/.sky/config.yaml'
+        >>> # With SKYPILOT_INSTANCE_ID=1
+        >>> get_sky_dir()
+        '/home/user/.sky-dev-1'
+    """
+    instance_id = os.environ.get('SKYPILOT_INSTANCE_ID', '')
+    if instance_id:
+        base = f'~/.sky-dev-{instance_id}'
+    else:
+        base = '~/.sky'
+
+    result = os.path.expanduser(base)
+    return os.path.join(result, subpath) if subpath else result
 
 
 class ProcessStatus(enum.Enum):

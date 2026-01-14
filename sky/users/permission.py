@@ -26,7 +26,7 @@ logging.getLogger('casbin.rbac').setLevel(sky_logging.ERROR)
 logger = sky_logging.init_logger(__name__)
 
 # Filelocks for the policy update.
-POLICY_UPDATE_LOCK_PATH = os.path.expanduser('~/.sky/.policy_update.lock')
+POLICY_UPDATE_LOCK_PATH = common_utils.get_sky_dir('.policy_update.lock')
 POLICY_UPDATE_LOCK_TIMEOUT_SECONDS = 20
 
 _enforcer_instance: Optional['PermissionService'] = None

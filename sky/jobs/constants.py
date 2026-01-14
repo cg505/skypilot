@@ -3,22 +3,24 @@ import os
 from typing import Any, Dict, Union
 
 from sky.skylet import constants as skylet_constants
+from sky.utils import common_utils
 
 JOBS_CONTROLLER_TEMPLATE = 'jobs-controller.yaml.j2'
-JOBS_CONTROLLER_YAML_PREFIX = '~/.sky/jobs_controller'
+JOBS_CONTROLLER_YAML_PREFIX = os.path.join(common_utils.get_sky_dir(),
+                                            'jobs_controller')
 JOBS_CONTROLLER_LOGS_DIR = '~/sky_logs/jobs_controller'
 
-JOBS_TASK_YAML_PREFIX = '~/.sky/managed_jobs'
+JOBS_TASK_YAML_PREFIX = os.path.join(common_utils.get_sky_dir(), 'managed_jobs')
 
-JOB_CONTROLLER_INDICATOR_FILE = '~/.sky/is_jobs_controller'
+JOB_CONTROLLER_INDICATOR_FILE = common_utils.get_sky_dir('is_jobs_controller')
 
-CONSOLIDATED_SIGNAL_PATH = os.path.expanduser('~/.sky/signals/')
+CONSOLIDATED_SIGNAL_PATH = common_utils.get_sky_dir('signals/')
 SIGNAL_FILE_PREFIX = '/tmp/sky_jobs_controller_signal_{}'
 
 # The consolidation mode lock ensures that if multiple API servers are running
 # at the same time (e.g. during a rolling update), recovery can only happen once
 # the previous API server has exited.
-CONSOLIDATION_MODE_LOCK_ID = '~/.sky/consolidation_mode_lock'
+CONSOLIDATION_MODE_LOCK_ID = common_utils.get_sky_dir('consolidation_mode_lock')
 
 # Resources as a dict for the jobs controller.
 # We use 50 GB disk size to reduce the cost.

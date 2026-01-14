@@ -27,7 +27,7 @@ from sky.utils import resource_checker
 logger = sky_logging.init_logger(__name__)
 
 # Filelocks for the user management.
-USER_LOCK_PATH = os.path.expanduser('~/.sky/.{user_id}.lock')
+USER_LOCK_PATH = common_utils.get_sky_dir('.{user_id}.lock')
 USER_LOCK_TIMEOUT_SECONDS = 20
 
 router = fastapi.APIRouter()
