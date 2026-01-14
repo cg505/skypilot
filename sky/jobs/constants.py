@@ -6,11 +6,10 @@ from sky.skylet import constants as skylet_constants
 from sky.utils import common_utils
 
 JOBS_CONTROLLER_TEMPLATE = 'jobs-controller.yaml.j2'
-JOBS_CONTROLLER_YAML_PREFIX = os.path.join(common_utils.get_sky_dir(),
-                                            'jobs_controller')
+JOBS_CONTROLLER_YAML_PREFIX = common_utils.get_sky_dir('jobs_controller')
 JOBS_CONTROLLER_LOGS_DIR = '~/sky_logs/jobs_controller'
 
-JOBS_TASK_YAML_PREFIX = os.path.join(common_utils.get_sky_dir(), 'managed_jobs')
+JOBS_TASK_YAML_PREFIX = common_utils.get_sky_dir('managed_jobs')
 
 JOB_CONTROLLER_INDICATOR_FILE = common_utils.get_sky_dir('is_jobs_controller')
 
