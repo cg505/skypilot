@@ -40,20 +40,6 @@ else:
     jinja2 = adaptors_common.LazyImport('jinja2')
     psutil = adaptors_common.LazyImport('psutil')
 
-USER_HASH_FILE = get_sky_dir('user_hash')
-USER_HASH_LENGTH = 8
-
-# We are using base36 to reduce the length of the hash. 2 chars -> 36^2 = 1296
-# possibilities. considering the final cluster name contains the prefix as well,
-# we should be fine with 2 chars.
-CLUSTER_NAME_HASH_LENGTH = 2
-
-_COLOR_PATTERN = re.compile(r'\x1b[^m]*m')
-
-_VALID_ENV_VAR_REGEX = '[a-zA-Z_][a-zA-Z0-9_]*'
-
-logger = sky_logging.init_logger(__name__)
-
 
 def get_sky_dir(subpath: str = '') -> str:
     """Get ~/.sky directory path with multi-instance dev support.
@@ -85,6 +71,21 @@ def get_sky_dir(subpath: str = '') -> str:
 
     result = os.path.expanduser(base)
     return os.path.join(result, subpath) if subpath else result
+
+
+USER_HASH_FILE = get_sky_dir('user_hash')
+USER_HASH_LENGTH = 8
+
+# We are using base36 to reduce the length of the hash. 2 chars -> 36^2 = 1296
+# possibilities. considering the final cluster name contains the prefix as well,
+# we should be fine with 2 chars.
+CLUSTER_NAME_HASH_LENGTH = 2
+
+_COLOR_PATTERN = re.compile(r'\x1b[^m]*m')
+
+_VALID_ENV_VAR_REGEX = '[a-zA-Z_][a-zA-Z0-9_]*'
+
+logger = sky_logging.init_logger(__name__)
 
 
 class ProcessStatus(enum.Enum):

@@ -60,13 +60,14 @@ if [ "$COMMAND" = "restart" ]; then
     sky api stop || true
     echo "" >&2
     echo "[sky-dev-api] Starting API server..." >&2
-    sky api start --port "$API_PORT"
+    sky api start
     exit 0
 fi
 
 # Execute the command
+# Port is determined automatically by SKYPILOT_INSTANCE_ID env var
 if [ "$COMMAND" = "start" ]; then
-    sky api start --port "$API_PORT"
+    sky api start
 elif [ "$COMMAND" = "stop" ]; then
     sky api stop
 elif [ "$COMMAND" = "status" ]; then
