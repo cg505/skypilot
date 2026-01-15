@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# sky-dev-api: API server management for SkyPilot dev instances
+#
+# Usage: sky-dev-api <instance-id> <command>
+#
+# Commands:
+#   start   - Start API server for this instance
+#   stop    - Stop API server for this instance
+#   status  - Show API server status for this instance
+#   restart - Restart API server for this instance
+#
+# Examples:
+#   sky-dev-api 1 start      # Start API server for instance 1 on port 46581
+#   sky-dev-api 2 stop       # Stop API server for instance 2
+#   sky-dev-api 1 status     # Check status of instance 1's API server
+
+set -e
+
+# Check arguments
+if [ "$#" -ne 2 ]; then
+    echo "Usage: $0 <instance-id> <command>" >&2
+    echo "" >&2
+    echo "Commands: start, stop, status, restart" >&2
+    echo "" >&2
+    echo "Examples:" >&2
+    echo "  $0 1 start" >&2
+    echo "  $0 2 stop" >&2
+    exit 1
+fi
+
+INSTANCE_ID="$1"
+COMMAND="$2"
+
+# Validate instance ID is a number
+if ! [[ "$INSTANCE_ID" =~ ^[0-9]+$ ]]; then
+    echo "Error: instance-id must be a non-negative integer" >&2
+    exit 1
+fi
+
+# Validate command
+if [[ ! "$COMMAND" =~ ^(start|stop|status|restart)$ ]]; then
+    echo "Error: command must be one of: start, stop, status, restart" >&2
+    exit 1
+fi
+
+# Set environment variables
+export SKYPILOT_INSTANCE_ID="$INSTANCE_ID"
+API_PORT=$((46580 + INSTANCE_ID))
+
+# Create instance directory if it doesn't exist
+INSTANCE_DIR="$HOME/.sky-dev-$INSTANCE_ID"
+mkdir -p "$INSTANCE_DIR"
+
+echo "[sky-dev-api] Instance $INSTANCE_ID - API port $API_PORT" >&2
+echo "" >&2
+
+# Handle restart specially
+if [ "$COMMAND" = "restart" ]; then
+    echo "[sky-dev-api] Stopping API server..." >&2
+    sky api stop || true
+    echo "" >&2
+    echo "[sky-dev-api] Starting API server..." >&2
+    sky api start
+    exit 0
+fi
+
+# Execute the command
+# Port is determined automatically by SKYPILOT_INSTANCE_ID env var
+if [ "$COMMAND" = "start" ]; then
+    sky api start
+elif [ "$COMMAND" = "stop" ]; then
+    sky api stop
+elif [ "$COMMAND" = "status" ]; then
+    sky api status
+fi

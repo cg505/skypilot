@@ -3,6 +3,7 @@
 import os
 
 from sky.skylet import constants
+from sky.utils import common_utils
 
 # pylint: disable=line-too-long
 # The SkyPilot API version that the code currently use.
@@ -38,7 +39,7 @@ MIN_AVAIL_MEM_GB_CONSOLIDATION_MODE = 4
 # Default encoder/decoder handler name.
 DEFAULT_HANDLER_NAME = 'default'
 # The path to the API request database.
-API_SERVER_REQUEST_DB_PATH = '~/.sky/api_server/requests.db'
+API_SERVER_REQUEST_DB_PATH = common_utils.get_sky_dir('api_server/requests.db')
 
 # The interval (seconds) for the cluster status to be refreshed in the
 # background.
@@ -53,7 +54,7 @@ VOLUME_REFRESH_DAEMON_INTERVAL_SECONDS = 60
 API_COOKIE_FILE_ENV_VAR = f'{constants.SKYPILOT_ENV_VAR_PREFIX}API_COOKIE_FILE'
 # Default file if unset.
 # Keep in sync with websocket_proxy.py
-API_COOKIE_FILE_DEFAULT_LOCATION = '~/.sky/cookies.txt'
+API_COOKIE_FILE_DEFAULT_LOCATION = common_utils.get_sky_dir('cookies.txt')
 
 # The path to the dashboard build output
 DASHBOARD_DIR = os.path.join(os.path.dirname(__file__), '..', 'dashboard',

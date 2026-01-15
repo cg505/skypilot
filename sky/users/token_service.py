@@ -13,6 +13,7 @@ import jwt
 
 from sky import global_user_state
 from sky import sky_logging
+from sky.utils import common_utils
 
 logger = sky_logging.init_logger(__name__)
 
@@ -22,7 +23,7 @@ JWT_ISSUER = 'sky'  # Shortened for compact tokens
 JWT_SECRET_DB_KEY = 'jwt_secret'
 
 # File lock for JWT secret initialization
-JWT_SECRET_LOCK_PATH = os.path.expanduser('~/.sky/.jwt_secret_init.lock')
+JWT_SECRET_LOCK_PATH = common_utils.get_sky_dir('.jwt_secret_init.lock')
 JWT_SECRET_LOCK_TIMEOUT_SECONDS = 20
 
 

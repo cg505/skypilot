@@ -57,10 +57,20 @@ else:
     pydantic = adaptors_common.LazyImport('pydantic')
     requests = adaptors_common.LazyImport('requests')
 
-DEFAULT_SERVER_URL = 'http://127.0.0.1:46580'
+def _get_api_server_port() -> int:
+    """Get the API server port, supporting multi-instance development."""
+    instance_id = os.environ.get('SKYPILOT_INSTANCE_ID', '')
+    if instance_id:
+        return 46580 + int(instance_id)
+    return 46580
+
+
+DEFAULT_SERVER_PORT = _get_api_server_port()
+DEFAULT_SERVER_URL = f'http://127.0.0.1:{DEFAULT_SERVER_PORT}'
 AVAILBLE_LOCAL_API_SERVER_HOSTS = ['0.0.0.0', 'localhost', '127.0.0.1']
 AVAILABLE_LOCAL_API_SERVER_URLS = [
-    f'http://{host}:46580' for host in AVAILBLE_LOCAL_API_SERVER_HOSTS
+    f'http://{host}:{DEFAULT_SERVER_PORT}'
+    for host in AVAILBLE_LOCAL_API_SERVER_HOSTS
 ]
 
 API_SERVER_CMD = '-m sky.server.server'
@@ -427,7 +437,7 @@ async def make_authenticated_request_async(
 def get_server_url(host: Optional[str] = None) -> str:
     endpoint = DEFAULT_SERVER_URL
     if host is not None:
-        endpoint = f'http://{host}:46580'
+        endpoint = f'http://{host}:{DEFAULT_SERVER_PORT}'
 
     url = os.environ.get(
         constants.SKY_API_SERVER_URL_ENV_VAR,
@@ -661,6 +671,8 @@ def _start_api_server(deploy: bool = False,
                     f'{colorama.Style.RESET_ALL}')
 
         args = [sys.executable, *API_SERVER_CMD.split()]
+        # Use instance-specific port for multi-instance development
+        args += [f'--port={DEFAULT_SERVER_PORT}']
         if deploy:
             args += ['--deploy']
         if host is not None:

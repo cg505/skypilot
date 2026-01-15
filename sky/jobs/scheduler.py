@@ -62,6 +62,7 @@ from sky.jobs import constants as managed_job_constants
 from sky.jobs import state
 from sky.jobs import utils as managed_job_utils
 from sky.skylet import constants
+from sky.utils import common_utils
 from sky.utils import controller_utils
 from sky.utils import subprocess_utils
 
@@ -76,13 +77,13 @@ logger = sky_logging.init_logger('sky.jobs.controller')
 
 # Job controller lock. This is used to synchronize writing/reading the
 # controller pid file.
-JOB_CONTROLLER_PID_LOCK = os.path.expanduser(
-    '~/.sky/locks/job_controller_pid.lock')
+JOB_CONTROLLER_PID_LOCK = common_utils.get_sky_dir(
+    'locks/job_controller_pid.lock')
 
-JOB_CONTROLLER_PID_PATH = os.path.expanduser('~/.sky/job_controller_pid')
-JOB_CONTROLLER_ENV_PATH = os.path.expanduser('~/.sky/job_controller_env')
+JOB_CONTROLLER_PID_PATH = common_utils.get_sky_dir('job_controller_pid')
+JOB_CONTROLLER_ENV_PATH = common_utils.get_sky_dir('job_controller_env')
 
-CURRENT_HASH = os.path.expanduser('~/.sky/wheels/current_sky_wheel_hash')
+CURRENT_HASH = common_utils.get_sky_dir('wheels/current_sky_wheel_hash')
 
 
 def _parse_controller_pid_entry(
