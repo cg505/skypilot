@@ -54,7 +54,7 @@ Each worktree gets a deterministic port (46501-46599) based on a hash of the rep
 ## Credentials
 
 Cloud credentials are mounted read-only from your home directory (if they exist):
-`~/.aws`, `~/.azure`, `~/.config/gcloud`, `~/.kube`, `~/.ssh`, `~/.oci`, `~/.vsphere`, `~/.nebius`, `~/.ibm`, `~/.seeweb_cloud`, `~/.config/vastai`, `~/.scp`, `~/.config/rclone`
+`~/.aws`, `~/.azure`, `~/.config/gcloud`, `~/.kube`, `~/.ssh`, `~/.oci`, `~/.vsphere`, `~/.nebius`, `~/.ibm`, `~/.seeweb_cloud`, `~/.config/vastai`, `~/.scp`
 
 ## Environment Variables
 
