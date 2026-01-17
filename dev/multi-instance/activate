@@ -26,11 +26,10 @@ fi
 
 # Save original state
 _SKY_ORIG_PS1="${PS1:-}"
+_SKY_ORIG_PATH="$PATH"
 
-# Create wrapper functions (functions work in non-interactive shells, unlike aliases)
-sky() { "$_SKY_WRAPPER_DIR/sky" "$@"; }
-start-container() { "$_SKY_WRAPPER_DIR/start-container" "$@"; }
-stop-container() { "$_SKY_WRAPPER_DIR/stop-container" "$@"; }
+# Prepend wrapper directory to PATH (persists to child processes)
+export PATH="$_SKY_WRAPPER_DIR:$PATH"
 
 # Modify prompt
 PS1="(sky-dev) ${PS1:-}"
@@ -41,9 +40,9 @@ export _SKY_WRAPPER_DIR
 
 # Deactivate function
 deactivate-sky() {
-    unset -f sky start-container stop-container 2>/dev/null
+    PATH="$_SKY_ORIG_PATH"
     PS1="${_SKY_ORIG_PS1:-}"
-    unset _SKY_WRAPPER_ACTIVE _SKY_WRAPPER_DIR _SKY_ORIG_PS1
+    unset _SKY_WRAPPER_ACTIVE _SKY_WRAPPER_DIR _SKY_ORIG_PS1 _SKY_ORIG_PATH
     unset -f deactivate-sky
     echo "Deactivated."
 }
