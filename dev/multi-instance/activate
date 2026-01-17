@@ -27,10 +27,10 @@ fi
 # Save original state
 _SKY_ORIG_PS1="${PS1:-}"
 
-# Create aliases
-alias sky="$_SKY_WRAPPER_DIR/sky"
-alias start-container="$_SKY_WRAPPER_DIR/start-container"
-alias stop-container="$_SKY_WRAPPER_DIR/stop-container"
+# Create wrapper functions (functions work in non-interactive shells, unlike aliases)
+sky() { "$_SKY_WRAPPER_DIR/sky" "$@"; }
+start-container() { "$_SKY_WRAPPER_DIR/start-container" "$@"; }
+stop-container() { "$_SKY_WRAPPER_DIR/stop-container" "$@"; }
 
 # Modify prompt
 PS1="(sky-dev) ${PS1:-}"
@@ -41,7 +41,7 @@ export _SKY_WRAPPER_DIR
 
 # Deactivate function
 deactivate-sky() {
-    unalias sky start-container stop-container 2>/dev/null
+    unset -f sky start-container stop-container 2>/dev/null
     PS1="${_SKY_ORIG_PS1:-}"
     unset _SKY_WRAPPER_ACTIVE _SKY_WRAPPER_DIR _SKY_ORIG_PS1
     unset -f deactivate-sky

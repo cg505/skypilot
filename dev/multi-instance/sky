@@ -26,10 +26,18 @@ for var in $(compgen -v | grep -E '^(SKYPILOT_|SKY_|AWS_|AZURE_|GOOGLE_|GCP_|OCI
 done
 
 # For 'api start', bind to 0.0.0.0 so port forwarding works
-EXTRA_ARGS=""
 if [[ "${1:-}" == "api" ]] && [[ "${2:-}" == "start" ]]; then
-    EXTRA_ARGS="--host 0.0.0.0"
+    exec docker exec $DOCKER_FLAGS $ENV_ARGS "$CONTAINER_NAME" \
+        /opt/skypilot-venv/bin/sky "$@" --host 0.0.0.0
+fi
+
+# For other commands, ensure API server is running with correct binding first
+# (prevents auto-start from binding to 127.0.0.1 which breaks port forwarding)
+if [[ "${1:-}" != "api" ]]; then
+    if ! docker exec "$CONTAINER_NAME" curl -s http://0.0.0.0:46580/api/health &>/dev/null; then
+        docker exec "$CONTAINER_NAME" /opt/skypilot-venv/bin/sky api start --host 0.0.0.0 &>/dev/null || true
+    fi
 fi
 
 exec docker exec $DOCKER_FLAGS $ENV_ARGS "$CONTAINER_NAME" \
-    /opt/skypilot-venv/bin/sky "$@" $EXTRA_ARGS
+    /opt/skypilot-venv/bin/sky "$@"
