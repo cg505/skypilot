@@ -1,11 +1,11 @@
 # Common functions for multi-instance dev scripts.
 # Source this file, don't execute it.
 
-# Find repo root by looking for .git directory
+# Find repo root by looking for .git (directory or file for worktrees)
 find_repo_root() {
     local dir="$PWD"
     while [[ "$dir" != "/" ]]; do
-        if [[ -d "$dir/.git" ]]; then
+        if [[ -e "$dir/.git" ]]; then
             echo "$dir"
             return 0
         fi

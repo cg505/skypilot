@@ -9,9 +9,14 @@ if [[ -n "${_SKY_WRAPPER_ACTIVE:-}" ]]; then
     return 0
 fi
 
-# Find script directory
-_SKY_WRAPPER_DIR="${BASH_SOURCE[0]%/*}"
-[[ "$_SKY_WRAPPER_DIR" == "${BASH_SOURCE[0]}" ]] && _SKY_WRAPPER_DIR="."
+# Find script directory (works in both bash and zsh)
+if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
+    _SKY_WRAPPER_DIR="${BASH_SOURCE[0]%/*}"
+    [[ "$_SKY_WRAPPER_DIR" == "${BASH_SOURCE[0]}" ]] && _SKY_WRAPPER_DIR="."
+else
+    # zsh
+    _SKY_WRAPPER_DIR="${0:a:h}"
+fi
 _SKY_WRAPPER_DIR="$(cd "$_SKY_WRAPPER_DIR" && pwd)"
 
 # Auto-run setup if needed
