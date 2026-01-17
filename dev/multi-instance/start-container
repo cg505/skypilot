@@ -25,6 +25,7 @@ if ! container_exists; then
     docker create \
         --name "$CONTAINER_NAME" \
         --hostname "skypilot-dev" \
+        --init \
         -it \
         -p "${PORT}:46580" \
         -v "$REPO_ROOT:/app" \
