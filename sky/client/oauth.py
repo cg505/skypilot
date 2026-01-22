@@ -5,7 +5,10 @@ import threading
 import time
 from typing import Dict, Optional
 
-AUTH_TIMEOUT = 300  # 5 minutes
+from sky.server import constants as server_constants
+
+# Re-export for backward compatibility and convenience
+AUTH_TIMEOUT = server_constants.AUTH_SESSION_TIMEOUT_SECONDS
 
 
 class _AuthCallbackHandler(BaseHTTPRequestHandler):

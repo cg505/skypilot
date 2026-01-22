@@ -13,8 +13,8 @@ from sky.server import constants as server_constants
 from sky.utils import common_utils
 from sky.utils.db import db_utils
 
-# Session expiration time in seconds (5 minutes)
-SESSION_EXPIRATION_SECONDS = 300
+# Session expiration time - use shared constant with client
+SESSION_EXPIRATION_SECONDS = server_constants.AUTH_SESSION_TIMEOUT_SECONDS
 
 # Table name for auth sessions
 _AUTH_SESSIONS_TABLE = 'auth_sessions'
