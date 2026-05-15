@@ -442,7 +442,11 @@ async def get_job_status(
     except Exception:  # pylint: disable=broad-except
         _bc = None
     if _bc is not None:
-        _phase = _bc.lookup(cluster_name)
+        # Pods are labelled with `skypilot-cluster-name` = cluster_name_on_cloud
+        # (cluster_name with the user-hash suffix), not the bare cluster_name
+        # that get_job_status is called with.
+        _key = handle.cluster_name_on_cloud
+        _phase = _bc.lookup(_key)
         if _phase == 'Running':
             _bc.record_skip()
             logger.info(f'STATUS_TIMING result=broadcast_skip '
