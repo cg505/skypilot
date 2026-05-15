@@ -1322,18 +1322,12 @@ LAUNCHES_PER_SERVICE = 4
 # Based on testing, each worker takes around 200-300MB memory. Keeping it
 # higher to be safe.
 JOB_WORKER_MEMORY_MB = 400
-# this can probably be increased to around 300-400 but keeping it lower to just
-# to be safe
-MAX_JOBS_PER_WORKER = 200
-# Maximum number of controllers that can be running. Hard to handle more than
-# 512 launches at once.
-MAX_CONTROLLERS = 512 // LAUNCHES_PER_WORKER
-# Limit the number of jobs that can be running at once on the entire jobs
-# controller cluster. It's hard to handle cancellation of more than 2000 jobs at
-# once.
-# TODO(cooperc): Once we eliminate static bottlenecks (e.g. sqlite), remove this
-# hardcoded max limit.
-MAX_TOTAL_RUNNING_JOBS = 2000
+# Bench: was 200; effectively unbounded for scale benchmark.
+MAX_JOBS_PER_WORKER = 99999
+# Bench: was 512 // LAUNCHES_PER_WORKER; effectively unbounded.
+MAX_CONTROLLERS = 99999
+# Bench: was 2000; removes the 2000-RUN hard cap for the scale benchmark.
+MAX_TOTAL_RUNNING_JOBS = 99999
 
 # In consolidation mode, cap the fraction of available memory (after
 # controller reservation) that server workers can consume. The remainder is
