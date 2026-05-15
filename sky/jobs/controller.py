@@ -150,19 +150,19 @@ class JobStatusBroadcaster:
 
     def _refresh_one_context(self, ctx_name: str) -> None:
         from sky.adaptors import kubernetes  # pylint: disable=import-outside-toplevel
-        ns = skypilot_config.get_nested(('kubernetes', 'namespace'),
-                                        'default') or 'default'
         core_api = kubernetes.core_api(ctx_name)
         try:
-            resp = core_api.list_namespaced_pod(
-                ns,
+            # Bench: query all namespaces so we work regardless of where the
+            # operator deployed (default, skypilot, etc.). label_selector keeps
+            # the result set bounded.
+            resp = core_api.list_pod_for_all_namespaces(
                 label_selector='skypilot-cluster-name',
                 _request_timeout=_BROADCAST_LIST_TIMEOUT_S,
                 limit=2000,
             )
         except Exception as e:  # pylint: disable=broad-except
             logger.warning(
-                f'[broadcaster] list_namespaced_pod {ctx_name}/{ns} failed: '
+                f'[broadcaster] list_pod_for_all_namespaces {ctx_name} failed: '
                 f'{type(e).__name__}: {e}')
             return
         now = time.monotonic()
