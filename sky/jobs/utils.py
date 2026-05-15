@@ -92,6 +92,15 @@ JOB_STARTED_STATUS_CHECK_GAP_SECONDS = 5
 _LOG_STREAM_CHECK_CONTROLLER_GAP_SECONDS = 5
 
 _JOB_STATUS_FETCH_TIMEOUT_SECONDS = 30
+
+# === Track 3 Phase 1 broadcaster singleton ===
+# Populated by sky.jobs.controller.main() at controller-process startup.
+# Lives in this module (not in sky.jobs.controller) because controller.py is
+# launched via `python -m sky.jobs.controller`, which loads it as `__main__`
+# rather than its package path — making any module-level state there invisible
+# to consumers that import via the package path.
+_BROADCASTER = None
+# === end Track 3 Phase 1 patch ===
 JOB_STATUS_FETCH_TOTAL_TIMEOUT_SECONDS = 60
 
 _JOB_WAITING_STATUS_MESSAGE = ux_utils.spinner_message(
@@ -432,20 +441,10 @@ async def get_job_status(
     assert isinstance(handle, backends.CloudVmRayResourceHandle), handle
 
     # === Track 3 Phase 1 broadcaster short-circuit ===
-    try:
-        # pylint: disable=import-outside-toplevel
-        from sky.jobs import controller as managed_job_controller
-        _bc = managed_job_controller.get_broadcaster()
-    except Exception as _e:  # pylint: disable=broad-except
-        logger.info(f'STATUS_TIMING result=bc_import_err err={_e!r}')
-        _bc = None
+    _bc = _BROADCASTER  # set by sky.jobs.controller.main() at process startup
     _key = handle.cluster_name_on_cloud
-    if _bc is None:
-        logger.info(f'STATUS_TIMING result=bc_none cluster={_key}')
-    else:
+    if _bc is not None:
         _phase = _bc.lookup(_key)
-        logger.info(f'STATUS_TIMING result=bc_lookup cluster={_key} '
-                    f'phase={_phase}')
         if _phase == 'Running':
             _bc.record_skip()
             logger.info(f'STATUS_TIMING result=broadcast_skip '

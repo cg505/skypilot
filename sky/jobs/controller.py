@@ -179,12 +179,10 @@ class JobStatusBroadcaster:
             self._pod_status[cluster] = (phase, now)
 
 
-# Module-level singleton, populated in main().
-_BROADCASTER: Optional[JobStatusBroadcaster] = None
-
-
-def get_broadcaster() -> Optional[JobStatusBroadcaster]:
-    return _BROADCASTER
+# The module-level singleton lives in `sky.jobs.utils` to avoid the issue
+# where `python -m sky.jobs.controller` loads this module as `__main__`,
+# making any module-level variable invisible to consumers that import
+# `sky.jobs.controller` via its package path.
 # === end Track 3 Phase 1 patch ===
 
 
@@ -2590,9 +2588,12 @@ async def main(controller_uuid: str):
     controller = ControllerManager(controller_uuid)
 
     # === Track 3 Phase 1: spawn the broadcaster (per process) ===
-    global _BROADCASTER
-    _BROADCASTER = JobStatusBroadcaster()
-    _BROADCASTER.start()
+    # Store in `sky.jobs.utils._BROADCASTER` (not this module) because when this
+    # file is run as `python -m sky.jobs.controller`, it is loaded as `__main__`
+    # rather than `sky.jobs.controller`, so consumers that import the package
+    # path see a different module instance with no broadcaster set.
+    managed_job_utils._BROADCASTER = JobStatusBroadcaster()
+    managed_job_utils._BROADCASTER.start()
     # === end Track 3 Phase 1 patch ===
 
     # Will happen multiple times, who cares though
