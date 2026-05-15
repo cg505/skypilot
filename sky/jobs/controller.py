@@ -68,6 +68,125 @@ logger = sky_logging.init_logger('sky.jobs.controller')
 _background_tasks: Set[asyncio.Task] = set()
 _background_tasks_lock: asyncio.Lock = asyncio.Lock()
 
+# === Track 3 Phase 1: batched pod-status broadcaster ===
+# See Notion: Track 3 — Batched status check (plan).
+_BROADCAST_INTERVAL_S = 5.0
+_BROADCAST_STALE_THRESHOLD_S = _BROADCAST_INTERVAL_S * 2.5
+_BROADCAST_LIST_TIMEOUT_S = 10.0
+
+
+class JobStatusBroadcaster:
+    """Periodic batched pod-status reader, shared across this process.
+
+    Replaces per-job exec-based status check for the common case where the
+    pod is Running. The consultation site (`sky.jobs.utils.get_job_status`)
+    short-circuits when this broadcaster reports a fresh `Running` phase for
+    the cluster.
+    """
+
+    def __init__(self) -> None:
+        # cluster_name -> (pod_phase, last_seen_monotonic_ts)
+        self._pod_status: Dict[str, Tuple[str, float]] = {}
+        # Counters for observability — logged ~every minute.
+        self._skipped = 0
+        self._fellthrough = 0
+        self._last_log_ts = 0.0
+        self._task: Optional[asyncio.Task] = None
+
+    def start(self) -> None:
+        if self._task is None or self._task.done():
+            self._task = asyncio.create_task(self._loop())
+
+    def lookup(self, cluster_name: str) -> Optional[str]:
+        entry = self._pod_status.get(cluster_name)
+        if entry is None:
+            return None
+        phase, ts = entry
+        if time.monotonic() - ts > _BROADCAST_STALE_THRESHOLD_S:
+            return None
+        return phase
+
+    def record_skip(self) -> None:
+        self._skipped += 1
+
+    def record_fallthrough(self) -> None:
+        self._fellthrough += 1
+
+    async def _loop(self) -> None:
+        try:
+            contexts = skypilot_config.get_nested(
+                ('kubernetes', 'allowed_contexts'), [])
+        except Exception:  # pylint: disable=broad-except
+            contexts = []
+        if not contexts:
+            logger.info('[broadcaster] no kubernetes contexts; idle')
+            return
+        logger.info(f'[broadcaster] started for contexts={contexts}')
+
+        while True:
+            t0 = time.monotonic()
+            for ctx_name in contexts:
+                try:
+                    await asyncio.to_thread(self._refresh_one_context, ctx_name)
+                except Exception as e:  # pylint: disable=broad-except
+                    logger.warning(
+                        f'[broadcaster] refresh failed for {ctx_name}: '
+                        f'{type(e).__name__}: {e}')
+
+            now = time.monotonic()
+            if now - self._last_log_ts > 60.0:
+                logger.info(
+                    f'[broadcaster] tracked_clusters='
+                    f'{len(self._pod_status)} '
+                    f'skipped={self._skipped} '
+                    f'fellthrough={self._fellthrough} '
+                    f'last_refresh_dur={(time.monotonic() - t0):.3f}s')
+                self._last_log_ts = now
+
+            sleep_remaining = max(
+                0.0,
+                _BROADCAST_INTERVAL_S - (time.monotonic() - t0))
+            await asyncio.sleep(sleep_remaining)
+
+    def _refresh_one_context(self, ctx_name: str) -> None:
+        from sky.adaptors import kubernetes  # pylint: disable=import-outside-toplevel
+        ns = skypilot_config.get_nested(('kubernetes', 'namespace'),
+                                        'default') or 'default'
+        core_api = kubernetes.core_api(ctx_name)
+        try:
+            resp = core_api.list_namespaced_pod(
+                ns,
+                label_selector='skypilot-cluster-name',
+                _request_timeout=_BROADCAST_LIST_TIMEOUT_S,
+                limit=2000,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.warning(
+                f'[broadcaster] list_namespaced_pod {ctx_name}/{ns} failed: '
+                f'{type(e).__name__}: {e}')
+            return
+        now = time.monotonic()
+        for pod in resp.items:
+            labels = pod.metadata.labels or {}
+            cluster = labels.get('skypilot-cluster-name')
+            if cluster is None:
+                continue
+            # Only consider head pods for liveness.
+            role = labels.get('ray-node-type', '')
+            if role and role != 'head':
+                continue
+            phase = pod.status.phase or 'Unknown'
+            self._pod_status[cluster] = (phase, now)
+
+
+# Module-level singleton, populated in main().
+_BROADCASTER: Optional[JobStatusBroadcaster] = None
+
+
+def get_broadcaster() -> Optional[JobStatusBroadcaster]:
+    return _BROADCASTER
+# === end Track 3 Phase 1 patch ===
+
 
 async def create_background_task(coro: typing.Coroutine) -> None:
     """Create a background task and add it to the set of background tasks.
@@ -2469,6 +2588,12 @@ async def main(controller_uuid: str):
         plugins.ExtensionContext(context=plugins.PluginContext.CONTROLLER))
 
     controller = ControllerManager(controller_uuid)
+
+    # === Track 3 Phase 1: spawn the broadcaster (per process) ===
+    global _BROADCASTER
+    _BROADCASTER = JobStatusBroadcaster()
+    _BROADCASTER.start()
+    # === end Track 3 Phase 1 patch ===
 
     # Will happen multiple times, who cares though
     os.makedirs(jobs_constants.CONSOLIDATED_SIGNAL_PATH, exist_ok=True)

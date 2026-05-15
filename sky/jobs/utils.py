@@ -430,6 +430,29 @@ async def get_job_status(
         logger.info(f'Cluster {cluster_name} not found.')
         return None, None
     assert isinstance(handle, backends.CloudVmRayResourceHandle), handle
+
+    # === Track 3 Phase 1 broadcaster short-circuit ===
+    # See Notion: Track 3 — Batched status check (plan). When this process's
+    # broadcaster reports the cluster's head pod as fresh `Running`, skip the
+    # per-pod kubectl-exec status check (the load that triggers RCA-5).
+    try:
+        # pylint: disable=import-outside-toplevel
+        from sky.jobs import controller as managed_job_controller
+        _bc = managed_job_controller.get_broadcaster()
+    except Exception:  # pylint: disable=broad-except
+        _bc = None
+    if _bc is not None:
+        _phase = _bc.lookup(cluster_name)
+        if _phase == 'Running':
+            _bc.record_skip()
+            logger.info(f'STATUS_TIMING result=broadcast_skip '
+                        f'cluster={cluster_name}')
+            _log_job_status(job_lib.JobStatus.RUNNING)
+            return job_lib.JobStatus.RUNNING, None
+        else:
+            _bc.record_fallthrough()
+    # === end Track 3 Phase 1 patch ===
+
     job_ids = None if job_id is None else [job_id]
     try:
         statuses = await asyncio.wait_for(
