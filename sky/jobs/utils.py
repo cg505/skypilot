@@ -432,25 +432,24 @@ async def get_job_status(
     assert isinstance(handle, backends.CloudVmRayResourceHandle), handle
 
     # === Track 3 Phase 1 broadcaster short-circuit ===
-    # See Notion: Track 3 — Batched status check (plan). When this process's
-    # broadcaster reports the cluster's head pod as fresh `Running`, skip the
-    # per-pod kubectl-exec status check (the load that triggers RCA-5).
     try:
         # pylint: disable=import-outside-toplevel
         from sky.jobs import controller as managed_job_controller
         _bc = managed_job_controller.get_broadcaster()
-    except Exception:  # pylint: disable=broad-except
+    except Exception as _e:  # pylint: disable=broad-except
+        logger.info(f'STATUS_TIMING result=bc_import_err err={_e!r}')
         _bc = None
-    if _bc is not None:
-        # Pods are labelled with `skypilot-cluster-name` = cluster_name_on_cloud
-        # (cluster_name with the user-hash suffix), not the bare cluster_name
-        # that get_job_status is called with.
-        _key = handle.cluster_name_on_cloud
+    _key = handle.cluster_name_on_cloud
+    if _bc is None:
+        logger.info(f'STATUS_TIMING result=bc_none cluster={_key}')
+    else:
         _phase = _bc.lookup(_key)
+        logger.info(f'STATUS_TIMING result=bc_lookup cluster={_key} '
+                    f'phase={_phase}')
         if _phase == 'Running':
             _bc.record_skip()
             logger.info(f'STATUS_TIMING result=broadcast_skip '
-                        f'cluster={cluster_name}')
+                        f'cluster={_key}')
             _log_job_status(job_lib.JobStatus.RUNNING)
             return job_lib.JobStatus.RUNNING, None
         else:
