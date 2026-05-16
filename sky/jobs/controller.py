@@ -70,14 +70,14 @@ _background_tasks_lock: asyncio.Lock = asyncio.Lock()
 
 # === Track 3 Phase 1: batched pod-status broadcaster ===
 # See Notion: Track 3 — Batched status check (plan).
-# Phase 1.5: bumped from 5s to 30s. With ~100 controller processes each running
-# their own broadcaster, the 5s cadence saturated API-pod CPU on AWS Run-D
-# (Phase 1 ramp v1 hit 64-core API limit at n=600). 30s reduces aggregate
-# list-pod load by 6× while still catching pod transitions within the
-# existing JOB_STATUS_CHECK_GAP_SECONDS=15s + retry window.
-_BROADCAST_INTERVAL_S = 30.0
+# Phase 2 v2 + interval 60s: with ~100 controller processes each running
+# their own broadcaster, the per-process list-pods is the next bottleneck
+# (Phase 1 v6 hit 92-core API CPU at 945 RUN with 30s interval). Doubling
+# to 60s halves that overhead and tests whether the API CPU bottleneck is
+# the limiting factor on Phase-1 ceiling.
+_BROADCAST_INTERVAL_S = 60.0
 _BROADCAST_STALE_THRESHOLD_S = _BROADCAST_INTERVAL_S * 2.5
-_BROADCAST_LIST_TIMEOUT_S = 15.0
+_BROADCAST_LIST_TIMEOUT_S = 20.0
 
 
 class JobStatusBroadcaster:
