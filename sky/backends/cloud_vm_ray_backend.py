@@ -4567,11 +4567,17 @@ class CloudVmRayBackend(backends.Backend['CloudVmRayResourceHandle']):
                 logger.debug(f'gRPC failed, falling back to SSH: {e}')
 
         code = job_lib.JobLibCodeGen.get_job_status(job_ids)
+        # Track 3 Phase 2: pass request_timeout=25s so the inner kubectl-exec
+        # is bounded BELOW SkyPilot's outer 30 s wait_for. T2-A E2 showed
+        # that without this, cancelled wait_for calls leak their threads for
+        # 200+ s. This kwarg flows through run_on_head -> run_driver -> run
+        # and is consumed by KubernetesCommandRunner.run only.
         returncode, stdout, stderr = self.run_on_head(handle,
                                                       code,
                                                       stream_logs=stream_logs,
                                                       require_outputs=True,
-                                                      separate_stderr=True)
+                                                      separate_stderr=True,
+                                                      request_timeout=25)
         subprocess_utils.handle_returncode(returncode, code,
                                            'Failed to get job status.', stderr)
         statuses = job_lib.load_statuses_payload(stdout)

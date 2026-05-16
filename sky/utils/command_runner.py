@@ -1515,6 +1515,10 @@ class KubernetesCommandRunner(CommandRunner):
             source_bashrc: bool = False,
             skip_num_lines: int = 0,
             run_in_background: bool = False,
+            # Track 3 Phase 2: optional kubectl --request-timeout. Bounds this
+            # exec wall time. Only passed by the status-check call path so
+            # launch operations (which legitimately need 30-90 s) aren't killed.
+            request_timeout: Optional[int] = None,
             **kwargs) -> Union[int, Tuple[int, str, str]]:
         """Uses 'kubectl exec' to run 'cmd' on a pod or deployment by its
         name and namespace.
@@ -1554,6 +1558,15 @@ class KubernetesCommandRunner(CommandRunner):
         kubectl_args = [
             '--pod-running-timeout', f'{connect_timeout}s', '-n', self.namespace
         ]
+        # Track 3 Phase 2: bound the kubectl wall time on the status-check call
+        # path. T2-A E2/I6 showed asyncio.wait_for cancels the awaitable but
+        # not the blocking thread, so the inner kubectl exec can wedge for
+        # 200+ s after the outer 30 s timeout. --request-timeout aborts the
+        # call at the kubectl level. Only set when the caller opts in
+        # (request_timeout != None) - launches pass None and are unaffected.
+        if request_timeout is not None:
+            kubectl_args = [f'--request-timeout={request_timeout}s'
+                           ] + kubectl_args
         if self.context:
             kubectl_args += ['--context', self.context]
         # If context is none, it means we are using incluster auth. In this
